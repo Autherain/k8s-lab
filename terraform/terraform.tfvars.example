@@ -1,0 +1,51 @@
+# =============================================================================
+# EXEMPLE DE CONFIGURATION - terraform.tfvars.example
+# =============================================================================
+#
+# COMMENT UTILISER CE FICHIER :
+# 1. Copie ce fichier vers terraform.tfvars :
+#    cp terraform.tfvars.example terraform.tfvars
+#
+# 2. Modifie les valeurs selon tes besoins
+#
+# 3. terraform.tfvars est automatiquement lu par Terraform
+#
+# ⚠️ IMPORTANT : terraform.tfvars contient potentiellement des secrets,
+#    il est exclu du git via .gitignore
+#
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# NOM DU PROJET
+# -----------------------------------------------------------------------------
+# Préfixe pour toutes les ressources créées
+# Utile si tu as plusieurs labs
+
+project_name = "k8s-lab"
+
+# -----------------------------------------------------------------------------
+# TAILLE DES VMS
+# -----------------------------------------------------------------------------
+# Control-plane : s1-4 minimum recommandé (2 vCPU, 4GB RAM)
+# Worker : s1-4 minimum recommandé
+
+control_plane_flavor = "s1-4"
+worker_flavor        = "s1-4"
+
+# -----------------------------------------------------------------------------
+# CLÉ SSH
+# -----------------------------------------------------------------------------
+# Chemin vers ta clé SSH publique
+# Si tu n'en as pas : ssh-keygen -t ed25519 -C "k8s-lab"
+
+ssh_public_key_path = "~/.ssh/id_rsa.pub"
+
+# -----------------------------------------------------------------------------
+# SÉCURITÉ
+# -----------------------------------------------------------------------------
+# IP autorisée pour SSH et API Kubernetes
+# Pour plus de sécurité, mets ton IP : "1.2.3.4/32"
+# Pour trouver ton IP : curl ifconfig.me
+
+allowed_ssh_cidr = "0.0.0.0/0"
+

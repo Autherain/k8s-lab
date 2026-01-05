@@ -1,0 +1,72 @@
+# =============================================================================
+# GITIGNORE TERRAFORM
+# =============================================================================
+# Ces fichiers ne doivent PAS être commités car ils contiennent :
+# - Des secrets (credentials)
+# - L'état du déploiement (terraform.tfstate)
+# - Des fichiers générés localement
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# ÉTAT TERRAFORM
+# -----------------------------------------------------------------------------
+# ⚠️ SUPER IMPORTANT :
+# terraform.tfstate contient TOUT l'état de ton infrastructure.
+# Si tu le perds, Terraform ne sait plus ce qu'il a créé.
+# Si tu le commites, tes secrets sont exposés.
+#
+# Pour un vrai projet, on utilise un "remote backend" (S3, etc.)
+# Pour un lab, on le garde local mais on le sauvegarde manuellement.
+
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+
+# -----------------------------------------------------------------------------
+# RÉPERTOIRE DES PLUGINS
+# -----------------------------------------------------------------------------
+# Téléchargé par "terraform init", pas besoin de le versionner
+
+.terraform/
+
+# -----------------------------------------------------------------------------
+# FICHIERS DE VARIABLES AVEC SECRETS
+# -----------------------------------------------------------------------------
+# terraform.tfvars peut contenir des credentials
+# On garde .tfvars.example comme modèle
+
+terraform.tfvars
+*.auto.tfvars
+
+# -----------------------------------------------------------------------------
+# FICHIERS DE CRASH ET DEBUG
+# -----------------------------------------------------------------------------
+
+crash.log
+crash.*.log
+
+# -----------------------------------------------------------------------------
+# FICHIERS GÉNÉRÉS
+# -----------------------------------------------------------------------------
+
+*.tfplan
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# -----------------------------------------------------------------------------
+# FICHIERS D'IDE
+# -----------------------------------------------------------------------------
+
+.idea/
+*.swp
+*.swo
+*~
+
+# -----------------------------------------------------------------------------
+# FICHIERS MACOS
+# -----------------------------------------------------------------------------
+
+.DS_Store
+
