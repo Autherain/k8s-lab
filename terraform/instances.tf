@@ -46,13 +46,6 @@ locals {
       description = "Le worker exécute les pods applicatifs et reçoit les instructions du control-plane via kubelet"
     }
   }
-
-  # Génère les entrées /etc/hosts pour tous les nodes
-  # Chaque node aura toutes les entrées pour pouvoir résoudre tous les autres nodes
-  hosts_entries = join("\n", [
-    for node_name, node_config in local.nodes :
-    "${node_config.private_ip} ${local.prefix}-${node_name}"
-  ])
 }
 
 # -----------------------------------------------------------------------------
@@ -92,11 +85,6 @@ resource "openstack_compute_instance_v2" "nodes" {
 
     # Configure le hostname
     hostnamectl set-hostname ${local.prefix}-${each.key}
-
-    # Ajoute les hostnames de tous les nodes dans /etc/hosts
-    cat >> /etc/hosts <<HOSTS_EOF
-${local.hosts_entries}
-HOSTS_EOF
 
     # Crée un fichier pour indiquer que l'init est terminée
     touch /var/log/cloud-init-done

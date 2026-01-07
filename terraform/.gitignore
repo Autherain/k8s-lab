@@ -39,6 +39,16 @@ terraform.tfvars
 *.auto.tfvars
 
 # -----------------------------------------------------------------------------
+# CONFIGURATION BACKEND AVEC CREDENTIALS
+# -----------------------------------------------------------------------------
+# backend.json ou backend.hcl contiennent les credentials OVH Object Storage
+# On garde backend.json.example et backend.hcl.example comme modèles
+
+backend.json
+backend.hcl
+backend-config.tfvars
+
+# -----------------------------------------------------------------------------
 # FICHIERS DE CRASH ET DEBUG
 # -----------------------------------------------------------------------------
 

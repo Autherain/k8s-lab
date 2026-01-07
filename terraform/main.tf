@@ -22,10 +22,68 @@ terraform {
     }
   }
 
-  # ⚠️ IMPORTANT : L'état Terraform est stocké localement dans terraform.tfstate
-  # Ce fichier contient TOUTES les infos sur tes ressources (IPs, IDs, etc.)
-  # NE LE SUPPRIME PAS sinon Terraform ne saura plus ce qu'il a créé !
-  # NE LE COMMITE PAS car il peut contenir des infos sensibles.
+  # =============================================================================
+  # BACKEND - Stockage distant du tfstate dans OVH Object Storage
+  # =============================================================================
+  #
+  # L'état Terraform est maintenant stocké dans OVH Object Storage (compatible S3).
+  # Avantages :
+  # - Partageable entre plusieurs machines/équipes
+  # - Sauvegarde automatique avec versioning
+  # - Verrouillage (state locking) pour éviter les conflits
+  #
+  # ⚠️ IMPORTANT : Les credentials (access_key/secret_key) ne doivent PAS être
+  #    dans ce fichier. Utilise une des méthodes suivantes :
+  #
+  # MÉTHODE 1 : Variables d'environnement (recommandé)
+  #   export AWS_ACCESS_KEY_ID="ton-access-key"
+  #   export AWS_SECRET_ACCESS_KEY="ton-secret-key"
+  #   terraform init
+  #
+  # MÉTHODE 2 : Fichier backend.json (format JSON, pratique si OVH te donne du JSON)
+  #   terraform init -backend-config=backend.json
+  #
+  # MÉTHODE 3 : Fichier backend.hcl (format HCL)
+  #   terraform init -backend-config=backend.hcl
+  #
+  # Pour créer les credentials S3 :
+  #   1. OVH Manager > Public Cloud > Users & Roles
+  #   2. Crée un utilisateur avec rôle "Object Storage Operator"
+  #   3. Télécharge les credentials (Access Key + Secret Key)
+  #
+  # =============================================================================
+
+  backend "s3" {
+    # Endpoint OVH Object Storage (région Roubaix)
+    # Note: endpoints.s3 est la nouvelle syntaxe, mais on garde endpoint pour compatibilité
+    endpoint = "https://s3.rbx.io.cloud.ovh.net"
+
+    # Nom du bucket créé dans OVH Object Storage
+    bucket = "k8s-lab-terraform"
+
+    # Chemin du fichier tfstate dans le bucket
+    key = "k8s-lab/terraform.tfstate"
+
+    # Région : valeur factice requise par Terraform (ignorée car on force l'endpoint OVH)
+    # 
+    # ⚠️ EXPLICATION : Le paramètre "region" est OBLIGATOIRE dans Terraform, même si on utilise
+    #    un endpoint personnalisé. On met une région AWS valide (n'importe laquelle) car :
+    # - On force l'endpoint OVH avec "endpoint = ..." (ligne 59) → cette valeur est utilisée
+    # - On a "skip_region_validation = true" (ligne 82) → la région n'est pas validée
+    # → La valeur de "region" ci-dessous est donc ignorée, c'est juste pour que Terraform accepte la config
+    region = "us-east-1"
+
+    # Options nécessaires pour OVH (compatible S3 mais pas AWS)
+    skip_credentials_validation = true
+    skip_metadata_api_check     = true
+    skip_region_validation      = true
+    skip_requesting_account_id  = true
+    use_path_style              = true
+
+    # Les credentials sont lus depuis :
+    # - Variables d'environnement : AWS_ACCESS_KEY_ID et AWS_SECRET_ACCESS_KEY
+    # - Ou fichier backend-config (voir backend.hcl.example)
+  }
 }
 
 # -----------------------------------------------------------------------------
@@ -38,15 +96,22 @@ terraform {
 # - OS_TENANT_NAME      : Nom du projet
 # - OS_USERNAME         : Utilisateur OpenStack (créé dans OVH)
 # - OS_PASSWORD         : Mot de passe de l'utilisateur OpenStack
-# - OS_REGION_NAME      : Région (GRA11, SBG5, etc.)
 #
-# Tu récupères tout ça dans : OVH Manager > Public Cloud > Users & Roles
+# ⚠️ IMPORTANT : La région est configurée directement ici (RBX1 = Roubaix)
+#    Elle doit correspondre à la région du backend Object Storage (rbx)
+#    Si RBX1 n'est pas disponible dans ton projet, change pour RBX2
+#
+# Tu récupères les credentials dans : OVH Manager > Public Cloud > Users & Roles
 # Puis tu télécharges le fichier "openrc.sh" et tu fais "source openrc.sh"
 # -----------------------------------------------------------------------------
 
 provider "openstack" {
-  # Pas de configuration ici car tout vient des variables d'environnement
-  # C'est plus sécurisé que de mettre les credentials en dur dans le code
+  # Région OpenStack (RBX1 = Roubaix, correspond au backend Object Storage)
+  # Si RBX1 n'est pas disponible dans ton projet, change pour RBX2
+  region = "RBX1"
+
+  # Les autres paramètres (auth_url, tenant_id, username, password) sont lus
+  # depuis les variables d'environnement (plus sécurisé que de les mettre en dur)
 }
 
 # -----------------------------------------------------------------------------
