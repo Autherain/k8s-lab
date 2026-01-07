@@ -20,6 +20,18 @@ terraform {
       source  = "terraform-provider-openstack/openstack"
       version = "~> 1.54"
     }
+    tls = {
+      source  = "hashicorp/tls"
+      version = "~> 4.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.4"
+    }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.5"
+    }
   }
 
   # =============================================================================
@@ -122,9 +134,21 @@ provider "openstack" {
 # Elles servent à éviter les répétitions et à centraliser la configuration.
 # -----------------------------------------------------------------------------
 
+# Suffixe unique pour éviter les conflits de noms de clés
+# ⚠️ IMPORTANT : Pas de keeper ici ! Le suffixe doit rester stable même si on change project_name
+# Sinon, on régénère une nouvelle clé et on ne peut plus se connecter aux VMs existantes
+resource "random_id" "key_suffix" {
+  byte_length = 4
+}
+
 locals {
   # Préfixe pour nommer toutes les ressources
   prefix = var.project_name
+
+  # Nom unique pour la clé SSH (basé sur le projet + suffixe aléatoire)
+  # Exemple: k8s-lab_3f2a1b4c
+  # Le suffixe reste stable (pas de keeper) pour pouvoir se connecter même si project_name change
+  ssh_key_name = "${var.project_name}_${random_id.key_suffix.hex}"
 
   # IPs privées fixes pour les VMs
   # On les fixe pour que kubeadm sache toujours où trouver les autres nodes

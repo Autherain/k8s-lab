@@ -9,7 +9,6 @@ help: ## Affiche l'aide
 .PHONY: check
 check: ## Vérifie les prérequis
 	@command -v terraform &> /dev/null || (echo "✗ Terraform non installé" && exit 1)
-	@[ -f ~/.ssh/id_rsa.pub ] || [ -f ~/.ssh/id_ed25519.pub ] || (echo "✗ Aucune clé SSH trouvée" && exit 1)
 	@[ -n "$$OS_AUTH_URL" ] || echo "⚠ OS_AUTH_URL non défini"
 	@[ -f $(TERRAFORM_DIR)/terraform.tfvars ] || echo "⚠ terraform.tfvars n'existe pas"
 	@echo "✓ Vérifications OK"
@@ -28,12 +27,14 @@ setup: ## Crée terraform.tfvars depuis l'exemple
 .PHONY: ssh-cp
 ssh-cp: ## SSH au control-plane
 	@IP=$$(cd $(TERRAFORM_DIR) && terraform output -raw control_plane_public_ip 2>/dev/null); \
-	[ -n "$$IP" ] && ssh -o StrictHostKeyChecking=no ubuntu@$$IP || echo "Erreur: IP introuvable"
+	KEY=$$(cd $(TERRAFORM_DIR) && terraform output -raw ssh_private_key_path 2>/dev/null); \
+	[ -n "$$IP" ] && [ -n "$$KEY" ] && ssh -i $$KEY -o StrictHostKeyChecking=no ubuntu@$$IP || echo "Erreur: IP ou clé introuvable"
 
 .PHONY: ssh-worker
 ssh-worker: ## SSH au worker
 	@IP=$$(cd $(TERRAFORM_DIR) && terraform output -raw worker_public_ip 2>/dev/null); \
-	[ -n "$$IP" ] && ssh -o StrictHostKeyChecking=no ubuntu@$$IP || echo "Erreur: IP introuvable"
+	KEY=$$(cd $(TERRAFORM_DIR) && terraform output -raw ssh_private_key_path 2>/dev/null); \
+	[ -n "$$IP" ] && [ -n "$$KEY" ] && ssh -i $$KEY -o StrictHostKeyChecking=no ubuntu@$$IP || echo "Erreur: IP ou clé introuvable"
 
 .PHONY: clean
 clean: ## Nettoie les fichiers temporaires

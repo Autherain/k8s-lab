@@ -42,3 +42,6 @@ terraform.rc
 clouds.yaml
 kubeconfig
 *credentials*
+
+# Clés SSH générées par Terraform
+terraform/.ssh/

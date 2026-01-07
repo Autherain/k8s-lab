@@ -11,16 +11,32 @@
 # =============================================================================
 
 # -----------------------------------------------------------------------------
-# CLÉ SSH
+# CLÉ SSH GÉNÉRÉE PAR TERRAFORM
 # -----------------------------------------------------------------------------
 # 
-# On importe ta clé SSH publique dans OpenStack.
-# Elle sera injectée dans les VMs pour te permettre de te connecter.
+# On génère la clé SSH directement dans Terraform.
+# Avantages :
+# - La clé privée est stockée dans le tfstate (dans S3) → récupérable même si on perd le repo
+# - Pas besoin de gérer des clés SSH manuellement
+# - Compatible avec le backend S3 distant
 # -----------------------------------------------------------------------------
 
+resource "tls_private_key" "ssh" {
+  algorithm = "ED25519"
+}
+
+# Sauvegarde la clé privée localement avec un nom unique
+# Le nom inclut le projet et un suffixe aléatoire pour éviter les collisions
+resource "local_sensitive_file" "private_key" {
+  content         = tls_private_key.ssh.private_key_openssh
+  filename        = "${path.module}/.ssh/${local.ssh_key_name}"
+  file_permission = "0600"
+}
+
+# Importe la clé publique dans OpenStack
 resource "openstack_compute_keypair_v2" "k8s_keypair" {
   name       = "${local.prefix}-keypair"
-  public_key = file(pathexpand(var.ssh_public_key_path))
+  public_key = tls_private_key.ssh.public_key_openssh
 }
 
 # -----------------------------------------------------------------------------

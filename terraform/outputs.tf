@@ -20,12 +20,12 @@
 
 output "control_plane_public_ip" {
   description = "IP publique du control-plane (pour SSH et kubectl)"
-  value       = openstack_networking_floatingip_v2.control_plane_ip.address
+  value       = openstack_networking_floatingip_v2.nodes_ips["control-plane"].address
 }
 
 output "worker_public_ip" {
   description = "IP publique du worker (pour SSH)"
-  value       = openstack_networking_floatingip_v2.worker_ip.address
+  value       = openstack_networking_floatingip_v2.nodes_ips["worker"].address
 }
 
 # -----------------------------------------------------------------------------
@@ -48,12 +48,12 @@ output "worker_private_ip" {
 
 output "ssh_control_plane" {
   description = "Commande pour se connecter au control-plane"
-  value       = "ssh ubuntu@${openstack_networking_floatingip_v2.control_plane_ip.address}"
+  value       = "ssh -i ${local_sensitive_file.private_key.filename} ubuntu@${openstack_networking_floatingip_v2.nodes_ips["control-plane"].address}"
 }
 
 output "ssh_worker" {
   description = "Commande pour se connecter au worker"
-  value       = "ssh ubuntu@${openstack_networking_floatingip_v2.worker_ip.address}"
+  value       = "ssh -i ${local_sensitive_file.private_key.filename} ubuntu@${openstack_networking_floatingip_v2.nodes_ips["worker"].address}"
 }
 
 # -----------------------------------------------------------------------------
@@ -67,7 +67,7 @@ output "kubeadm_init_command" {
     # À exécuter sur le control-plane après avoir installé kubeadm :
     sudo kubeadm init \
       --apiserver-advertise-address=${local.control_plane_private_ip} \
-      --apiserver-cert-extra-sans=${openstack_networking_floatingip_v2.control_plane_ip.address} \
+      --apiserver-cert-extra-sans=${openstack_networking_floatingip_v2.nodes_ips["control-plane"].address} \
       --pod-network-cidr=10.244.0.0/16 \
       --node-name=${local.prefix}-control-plane
 
@@ -93,14 +93,14 @@ output "summary" {
     ╠══════════════════════════════════════════════════════════════════╣
     ║                                                                  ║
     ║  CONTROL-PLANE:                                                  ║
-    ║    IP Publique : ${openstack_networking_floatingip_v2.control_plane_ip.address}
+    ║    IP Publique : ${openstack_networking_floatingip_v2.nodes_ips["control-plane"].address}
     ║    IP Privée   : ${local.control_plane_private_ip}
-    ║    SSH         : ssh ubuntu@${openstack_networking_floatingip_v2.control_plane_ip.address}
+    ║    SSH         : ssh -i ${local_sensitive_file.private_key.filename} ubuntu@${openstack_networking_floatingip_v2.nodes_ips["control-plane"].address}
     ║                                                                  ║
     ║  WORKER:                                                         ║
-    ║    IP Publique : ${openstack_networking_floatingip_v2.worker_ip.address}
+    ║    IP Publique : ${openstack_networking_floatingip_v2.nodes_ips["worker"].address}
     ║    IP Privée   : ${local.worker_private_ip}
-    ║    SSH         : ssh ubuntu@${openstack_networking_floatingip_v2.worker_ip.address}
+    ║    SSH         : ssh -i ${local_sensitive_file.private_key.filename} ubuntu@${openstack_networking_floatingip_v2.nodes_ips["worker"].address}
     ║                                                                  ║
     ╠══════════════════════════════════════════════════════════════════╣
     ║  PROCHAINES ÉTAPES :                                             ║
@@ -110,5 +110,35 @@ output "summary" {
     ╚══════════════════════════════════════════════════════════════════╝
 
   EOF
+}
+
+# -----------------------------------------------------------------------------
+# CLÉ SSH PRIVÉE
+# -----------------------------------------------------------------------------
+# 
+# Output de la clé SSH privée pour pouvoir se connecter aux VMs
+# ⚠️ SECRET : Cette clé est sensible, ne la partage pas !
+# La clé est stockée dans le tfstate (dans S3), récupérable même si on perd le repo
+# -----------------------------------------------------------------------------
+
+output "ssh_private_key" {
+  description = "Clé SSH privée générée par Terraform (stockée dans le tfstate)"
+  value       = tls_private_key.ssh.private_key_openssh
+  sensitive   = true
+}
+
+output "ssh_private_key_path" {
+  description = "Chemin local vers la clé SSH privée (nom unique basé sur le projet)"
+  value       = local_sensitive_file.private_key.filename
+}
+
+output "ssh_key_name" {
+  description = "Nom unique de la clé SSH (projet + suffixe)"
+  value       = local.ssh_key_name
+}
+
+output "ssh_public_key" {
+  description = "Clé SSH publique (pour référence)"
+  value       = tls_private_key.ssh.public_key_openssh
 }
 

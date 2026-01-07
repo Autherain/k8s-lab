@@ -55,19 +55,6 @@ variable "image_name" {
 }
 
 # -----------------------------------------------------------------------------
-# CONFIGURATION SSH
-# -----------------------------------------------------------------------------
-
-variable "ssh_public_key_path" {
-  description = "Chemin vers ta clé SSH publique (ex: ~/.ssh/id_rsa.pub)"
-  type        = string
-  default     = "~/.ssh/id_rsa.pub"
-
-  # Cette clé sera injectée dans les VMs pour te permettre de te connecter
-  # Si tu n'as pas de clé SSH, génère-en une avec : ssh-keygen -t ed25519
-}
-
-# -----------------------------------------------------------------------------
 # CONFIGURATION RÉSEAU
 # -----------------------------------------------------------------------------
 

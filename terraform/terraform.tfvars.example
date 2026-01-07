@@ -35,10 +35,9 @@ worker_flavor        = "s1-4"
 # -----------------------------------------------------------------------------
 # CLÉ SSH
 # -----------------------------------------------------------------------------
-# Chemin vers ta clé SSH publique
-# Si tu n'en as pas : ssh-keygen -t ed25519 -C "k8s-lab"
-
-ssh_public_key_path = "~/.ssh/id_rsa.pub"
+# La clé SSH est maintenant générée automatiquement par Terraform
+# Elle est stockée dans le tfstate (dans S3), récupérable même si on perd le repo
+# Plus besoin de configurer de chemin de clé SSH manuellement !
 
 # -----------------------------------------------------------------------------
 # SÉCURITÉ
