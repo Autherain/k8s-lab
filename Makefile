@@ -23,19 +23,6 @@ setup: ## Crée terraform.tfvars depuis l'exemple
 	@cp $(TERRAFORM_DIR)/terraform.tfvars.example $(TERRAFORM_DIR)/terraform.tfvars
 	@echo "✓ terraform.tfvars créé"
 
-# Connexions SSH
-.PHONY: ssh-cp
-ssh-cp: ## SSH au control-plane
-	@IP=$$(cd $(TERRAFORM_DIR) && terraform output -raw control_plane_public_ip 2>/dev/null); \
-	KEY=$$(cd $(TERRAFORM_DIR) && terraform output -raw ssh_private_key_path 2>/dev/null); \
-	[ -n "$$IP" ] && [ -n "$$KEY" ] && ssh -i $$KEY -o StrictHostKeyChecking=no ubuntu@$$IP || echo "Erreur: IP ou clé introuvable"
-
-.PHONY: ssh-worker
-ssh-worker: ## SSH au worker
-	@IP=$$(cd $(TERRAFORM_DIR) && terraform output -raw worker_public_ip 2>/dev/null); \
-	KEY=$$(cd $(TERRAFORM_DIR) && terraform output -raw ssh_private_key_path 2>/dev/null); \
-	[ -n "$$IP" ] && [ -n "$$KEY" ] && ssh -i $$KEY -o StrictHostKeyChecking=no ubuntu@$$IP || echo "Erreur: IP ou clé introuvable"
-
 .PHONY: clean
 clean: ## Nettoie les fichiers temporaires
 	rm -rf $(TERRAFORM_DIR)/.terraform $(TERRAFORM_DIR)/tfplan $(TERRAFORM_DIR)/.terraform.lock.hcl

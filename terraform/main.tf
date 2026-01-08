@@ -49,7 +49,7 @@ terraform {
   #
   # MÉTHODE 1 : Variables d'environnement (recommandé)
   #   export AWS_ACCESS_KEY_ID="ton-access-key"
-  #   export AWS_SECRET_ACCESS_KEY="ton-secret-key"
+  #   export AWS_SECRET_ACCESS_KEY="ton-secret-key"  # pragma: allowlist secret
   #   terraform init
   #
   # MÉTHODE 2 : Fichier backend.json (format JSON, pratique si OVH te donne du JSON)
@@ -66,10 +66,6 @@ terraform {
   # =============================================================================
 
   backend "s3" {
-    # Endpoint OVH Object Storage (région Roubaix)
-    # Note: endpoints.s3 est la nouvelle syntaxe, mais on garde endpoint pour compatibilité
-    endpoint = "https://s3.rbx.io.cloud.ovh.net"
-
     # Nom du bucket créé dans OVH Object Storage
     bucket = "k8s-lab-terraform"
 
@@ -77,20 +73,20 @@ terraform {
     key = "k8s-lab/terraform.tfstate"
 
     # Région : valeur factice requise par Terraform (ignorée car on force l'endpoint OVH)
-    # 
-    # ⚠️ EXPLICATION : Le paramètre "region" est OBLIGATOIRE dans Terraform, même si on utilise
-    #    un endpoint personnalisé. On met une région AWS valide (n'importe laquelle) car :
-    # - On force l'endpoint OVH avec "endpoint = ..." (ligne 59) → cette valeur est utilisée
-    # - On a "skip_region_validation = true" (ligne 82) → la région n'est pas validée
-    # → La valeur de "region" ci-dessous est donc ignorée, c'est juste pour que Terraform accepte la config
     region = "us-east-1"
 
+    # Endpoints OVH Object Storage (nouvelle syntaxe Terraform 1.6+)
+    # pragma: allowlist secret
+    endpoints = { s3 = "https://s3.rbx.io.cloud.ovh.net" }
+
     # Options nécessaires pour OVH (compatible S3 mais pas AWS)
+    # Ces options désactivent les appels aux services AWS (STS, IAM, etc.)
     skip_credentials_validation = true
-    skip_metadata_api_check     = true
     skip_region_validation      = true
     skip_requesting_account_id  = true
+    skip_s3_checksum            = true
     use_path_style              = true
+    skip_metadata_api_check     = true
 
     # Les credentials sont lus depuis :
     # - Variables d'environnement : AWS_ACCESS_KEY_ID et AWS_SECRET_ACCESS_KEY
@@ -118,9 +114,13 @@ terraform {
 # -----------------------------------------------------------------------------
 
 provider "openstack" {
-  # Région OpenStack (RBX1 = Roubaix, correspond au backend Object Storage)
-  # Si RBX1 n'est pas disponible dans ton projet, change pour RBX2
-  region = "RBX1"
+  # Région OpenStack pour compute/network (RBX-A = Roubaix)
+  # ⚠️ Attention : OVH utilise "RBX" pour Object Storage mais "RBX-A" pour compute/network
+  # Pour voir les régions disponibles : openstack catalog list
+  region = "RBX-A"
+
+  # Force l'utilisation des endpoints publics (nécessaire pour OVH)
+  endpoint_type = "public"
 
   # Les autres paramètres (auth_url, tenant_id, username, password) sont lus
   # depuis les variables d'environnement (plus sécurisé que de les mettre en dur)

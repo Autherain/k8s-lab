@@ -8,11 +8,16 @@
 #
 # =============================================================================
 
+config {
+  call_module_type = "all"
+  force            = false
+}
+
 # Plugin Terraform (inclus par défaut)
 # Détecte les erreurs de syntaxe, les déclarations inutilisées, etc.
 plugin "terraform" {
   enabled = true
-  preset  = "recommended"
+  preset  = "all"  # Mode "all" pour des vérifications complètes
 }
 
 # Note : Il n'existe pas de plugin tflint spécifique pour OpenStack/OVH
