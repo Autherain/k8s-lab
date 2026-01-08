@@ -1,0 +1,147 @@
+# =============================================================================
+# GITHUB ACTIONS - CI/CD pour Terraform
+# =============================================================================
+#
+# FONCTIONNEMENT :
+# - Se déclenche automatiquement quand terraform/** change
+# - Plan : lint + validate + plan (automatique)
+# - Apply : nécessite approbation manuelle (environnement "production")
+#
+# CONFIGURATION REQUISE :
+#
+# 1. Repository secrets (Settings > Secrets and variables > Actions) :
+#    - OVH_S3_ACCESS_KEY, OVH_S3_SECRET_KEY (pour le backend S3)
+#    - OS_AUTH_URL, OS_TENANT_ID, OS_TENANT_NAME, OS_USERNAME, OS_PASSWORD
+#
+# 2. Environnement "production" (Settings > Environments) :
+#    Activer "Required reviewers" pour bloquer l'apply
+#
+# NOTE: OS_REGION_NAME est défini ci-dessous (RBX-A pour compute/network OVH)
+#
+# =============================================================================
+
+name: Terraform CI/CD
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+  pull_request:
+    paths:
+      - "terraform/**"
+      - ".github/workflows/terraform.yml"
+
+env:
+  TF_VERSION: "1.14.0"
+  TF_ROOT: "terraform"
+  # Configuration OpenStack v3 pour OVH
+  OS_REGION_NAME: "RBX-A" # ⚠️ OVH: utiliser RBX-A (pas RBX) pour compute/network
+  OS_IDENTITY_API_VERSION: "3"
+  OS_USER_DOMAIN_NAME: "Default"
+  OS_PROJECT_DOMAIN_NAME: "Default"
+
+# =============================================================================
+# JOBS
+# =============================================================================
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # ÉTAPE 1 : Lint, Validate & Plan (automatique)
+  # ---------------------------------------------------------------------------
+  plan:
+    name: "1️⃣ Lint & Plan"
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Format Check
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform fmt -check -recursive
+
+      - name: Setup TFLint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: TFLint
+        working-directory: ${{ env.TF_ROOT }}
+        run: |
+          tflint --init --config=../.tflint.hcl
+          tflint --config=../.tflint.hcl --format compact
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.OVH_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.OVH_S3_SECRET_KEY }}
+        run: terraform init -input=false
+
+      - name: Terraform Validate
+        working-directory: ${{ env.TF_ROOT }}
+        run: terraform validate -no-color
+
+      - name: Terraform Plan
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.OVH_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.OVH_S3_SECRET_KEY }}
+          OS_AUTH_URL: ${{ secrets.OS_AUTH_URL }}
+          OS_TENANT_ID: ${{ secrets.OS_TENANT_ID }}
+          OS_TENANT_NAME: ${{ secrets.OS_TENANT_NAME }}
+          OS_USERNAME: ${{ secrets.OS_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OS_PASSWORD }}
+        run: terraform plan -no-color -out=tfplan
+
+      - name: Upload Plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_ROOT }}/tfplan
+          retention-days: 5
+
+  # ---------------------------------------------------------------------------
+  # ÉTAPE 2 : Apply (MANUEL - uniquement sur main)
+  # ---------------------------------------------------------------------------
+  apply:
+    name: "2️⃣ Apply"
+    runs-on: ubuntu-latest
+    needs: plan
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.OVH_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.OVH_S3_SECRET_KEY }}
+        run: terraform init -input=false
+
+      - name: Download Plan
+        uses: actions/download-artifact@v4
+        with:
+          name: tfplan
+          path: ${{ env.TF_ROOT }}
+
+      - name: Terraform Apply
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          OS_AUTH_URL: ${{ secrets.OS_AUTH_URL }}
+          OS_TENANT_ID: ${{ secrets.OS_TENANT_ID }}
+          OS_TENANT_NAME: ${{ secrets.OS_TENANT_NAME }}
+          OS_USERNAME: ${{ secrets.OS_USERNAME }}
+          OS_PASSWORD: ${{ secrets.OS_PASSWORD }}
+        run: terraform apply -auto-approve tfplan

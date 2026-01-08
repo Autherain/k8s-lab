@@ -136,11 +136,14 @@ resource "openstack_networking_floatingip_v2" "nodes_ips" {
 # -----------------------------------------------------------------------------
 # 
 # Associe chaque IP flottante à son instance correspondante
+# 
+# ⚠️ On utilise openstack_networking_floatingip_associate_v2 (API Neutron)
+#    au lieu de openstack_compute_floatingip_associate_v2 (API Nova dépréciée)
 # -----------------------------------------------------------------------------
 
-resource "openstack_compute_floatingip_associate_v2" "nodes_ips_assoc" {
+resource "openstack_networking_floatingip_associate_v2" "nodes_ips_assoc" {
   for_each    = local.nodes
   floating_ip = openstack_networking_floatingip_v2.nodes_ips[each.key].address
-  instance_id = openstack_compute_instance_v2.nodes[each.key].id
+  port_id     = openstack_compute_instance_v2.nodes[each.key].network[0].port
 }
 
