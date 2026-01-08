@@ -1,0 +1,22 @@
+# =============================================================================
+# LEFTHOOK - Git Hooks Configuration
+# =============================================================================
+#
+# Ce fichier configure les hooks Git pour exécuter automatiquement :
+# - tflint : linting du code Terraform
+# - detect-secrets : détection de secrets dans le code
+#
+# Installation : lefthook install
+# =============================================================================
+
+pre-commit:
+  parallel: true
+  commands:
+    tflint:
+      glob: "terraform/*.tf"
+      run: tflint --chdir=terraform --config=.tflint.hcl
+      fail_text: "❌ tflint a détecté des problèmes dans le code Terraform"
+
+    detect-secrets:
+      run: detect-secrets-hook --baseline .secrets.baseline {staged_files}
+      fail_text: "❌ Des secrets potentiels ont été détectés ! Vérifiez vos fichiers."
