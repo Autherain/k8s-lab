@@ -139,6 +139,8 @@ jobs:
       - name: Terraform Apply
         working-directory: ${{ env.TF_ROOT }}
         env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.OVH_S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.OVH_S3_SECRET_KEY }}
           OS_AUTH_URL: ${{ secrets.OS_AUTH_URL }}
           OS_TENANT_ID: ${{ secrets.OS_TENANT_ID }}
           OS_TENANT_NAME: ${{ secrets.OS_TENANT_NAME }}
