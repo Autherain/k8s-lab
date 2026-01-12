@@ -45,3 +45,15 @@ kubeconfig
 
 # Clés SSH générées par Terraform
 terraform/.ssh/
+
+# Backend configuration avec secrets
+terraform/backend.json
+*.tfplan
+*.tfplan.*
+
+# Lefthook local overrides
+lefthook-local.yml
+
+# Binaires compilés
+scripts/get-cluster-info
+!scripts/get-cluster-info/
