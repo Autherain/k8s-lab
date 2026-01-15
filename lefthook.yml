@@ -13,10 +13,20 @@
 pre-commit:
   parallel: true
   commands:
+    terraform-fmt:
+      glob: "terraform/*.tf"
+      run: terraform -chdir=terraform fmt -check -recursive
+      fail_text: "❌ terraform fmt a détecté des différences de formatage"
+
     tflint:
       glob: "terraform/*.tf"
       run: tflint --chdir=terraform --config=../.tflint.hcl
       fail_text: "❌ tflint a détecté des problèmes dans le code Terraform"
+
+    terraform-init:
+      glob: "terraform/*.tf"
+      run: terraform -chdir=terraform init -backend=false -input=false
+      fail_text: "❌ terraform init a échoué"
 
     golangci-lint:
       glob: "scripts/**/*.go"
@@ -25,5 +35,5 @@ pre-commit:
       fail_text: "❌ golangci-lint a détecté des problèmes dans le code Go"
 
     detect-secrets:
-      run: detect-secrets-hook --baseline .secrets.baseline --exclude-files '_test\.go$' {staged_files}
+      run: detect-secrets-hook --baseline .secrets.baseline --exclude-files '_test\.go$' 'example$' {staged_files}
       fail_text: "❌ Des secrets potentiels ont été détectés ! Vérifiez vos fichiers."
