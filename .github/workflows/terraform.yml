@@ -84,6 +84,24 @@ jobs:
         working-directory: ${{ env.TF_ROOT }}
         run: terraform validate -no-color
 
+      # TODO: Supprimer cette step après debug
+      - name: Debug SCW secrets
+        env:
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_PROJECT_ID: ${{ secrets.SCW_PROJECT_ID }}
+        run: |
+          echo "=== Debug Scaleway secrets ==="
+          echo "SCW_ACCESS_KEY length: ${#SCW_ACCESS_KEY}"
+          echo "SCW_SECRET_KEY length: ${#SCW_SECRET_KEY}"
+          echo "SCW_PROJECT_ID length: ${#SCW_PROJECT_ID}"
+          echo "SCW_PROJECT_ID first 8 chars: ${SCW_PROJECT_ID:0:8}"
+          if [[ ${#SCW_PROJECT_ID} -eq 36 ]]; then
+            echo "SCW_PROJECT_ID looks like a valid UUID (36 chars)"
+          else
+            echo "WARNING: SCW_PROJECT_ID is NOT 36 chars, expected UUID format"
+          fi
+
       - name: Terraform Plan
         working-directory: ${{ env.TF_ROOT }}
         env:
