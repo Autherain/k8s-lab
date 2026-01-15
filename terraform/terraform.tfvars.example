@@ -23,14 +23,17 @@
 
 project_name = "k8s-lab"
 
+# Image Scaleway (nom exact trouvé via marketplace)
+image_name = "ubuntu_jammy"
+
 # -----------------------------------------------------------------------------
 # TAILLE DES VMS
 # -----------------------------------------------------------------------------
-# Control-plane : s1-4 minimum recommandé (2 vCPU, 4GB RAM)
-# Worker : s1-4 minimum recommandé
+# Control-plane : DEV1-M minimum recommandé (3 vCPU, 4GB RAM)
+# Worker : DEV1-M minimum recommandé
 
-control_plane_flavor = "s1-4"
-worker_flavor        = "s1-4"
+control_plane_flavor = "DEV1-M"
+worker_flavor        = "DEV1-M"
 
 # -----------------------------------------------------------------------------
 # CLÉ SSH
@@ -47,4 +50,12 @@ worker_flavor        = "s1-4"
 # Pour trouver ton IP : curl ifconfig.me
 
 allowed_ssh_cidr = "0.0.0.0/0"
+
+# -----------------------------------------------------------------------------
+# SCALEWAY (RÉGION / ZONE)
+# -----------------------------------------------------------------------------
+# La région doit correspondre à celle du bucket Object Storage
+
+scaleway_region = "fr-par"
+scaleway_zone   = "fr-par-1"
 

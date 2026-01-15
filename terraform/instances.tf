@@ -5,7 +5,7 @@
 # CE QUE FAIT CE FICHIER :
 # - Crée 2 VMs : 1 control-plane et 1 worker
 # - Configure les IPs (publiques + privées)
-# - Injecte la clé SSH
+# - Injecte la clé SSH (via account SSH keys)
 # - Lance un script d'initialisation basique
 #
 # =============================================================================
@@ -33,8 +33,8 @@ resource "local_sensitive_file" "private_key" {
   file_permission = "0600"
 }
 
-# Importe la clé publique dans OpenStack
-resource "openstack_compute_keypair_v2" "k8s_keypair" {
+# Enregistre la clé publique dans le compte Scaleway
+resource "scaleway_account_ssh_key" "k8s_keypair" {
   name       = "${local.prefix}-keypair"
   public_key = tls_private_key.ssh.public_key_openssh
 }
@@ -71,52 +71,45 @@ locals {
 # Crée les instances pour chaque node défini dans local.nodes
 # -----------------------------------------------------------------------------
 
-resource "openstack_compute_instance_v2" "nodes" {
+data "scaleway_marketplace_image" "ubuntu" {
+  label = var.image_name
+  zone  = var.scaleway_zone
+}
+
+resource "scaleway_instance_server" "nodes" {
   for_each = local.nodes
 
-  name            = "${local.prefix}-${each.key}"
-  flavor_name     = each.value.flavor
-  image_name      = var.image_name
-  key_pair        = openstack_compute_keypair_v2.k8s_keypair.name
-  security_groups = [openstack_networking_secgroup_v2.k8s_secgroup.name]
+  name              = "${local.prefix}-${each.key}"
+  type              = each.value.flavor
+  image             = data.scaleway_marketplace_image.ubuntu.id
+  security_group_id = scaleway_instance_security_group.k8s_secgroup.id
+  ip_id             = scaleway_instance_ip.nodes_ips[each.key].id
 
-  # Réseau privé avec IP fixe
-  network {
-    uuid        = openstack_networking_network_v2.k8s_network.id
-    fixed_ip_v4 = each.value.private_ip
+  # Script d'initialisation (cloud-init)
+  user_data = {
+    cloud-init = <<-EOF
+      #cloud-config
+      package_update: true
+      package_upgrade: true
+      packages:
+        - curl
+        - wget
+        - vim
+        - htop
+        - net-tools
+      runcmd:
+        - hostnamectl set-hostname ${local.prefix}-${each.key}
+        - touch /var/log/cloud-init-done
+    EOF
   }
 
-  # Script d'initialisation (user-data)
-  # Ce script est exécuté au premier démarrage de la VM
-  user_data = <<-EOF
-    #!/bin/bash
-    set -e
+  depends_on = [scaleway_account_ssh_key.k8s_keypair]
 
-    # Met à jour le système
-    apt-get update
-    apt-get upgrade -y
-
-    # Installe des outils utiles
-    apt-get install -y curl wget vim htop net-tools
-
-    # Configure le hostname
-    hostnamectl set-hostname ${local.prefix}-${each.key}
-
-    # Crée un fichier pour indiquer que l'init est terminée
-    touch /var/log/cloud-init-done
-  EOF
-
-  # Attend que le réseau soit prêt avant de créer l'instance
-  depends_on = [
-    openstack_networking_router_interface_v2.k8s_router_interface
+  tags = [
+    "project:${var.project_name}",
+    "role:${each.value.role}",
+    "managed_by:terraform"
   ]
-
-  # Métadonnées pour identifier la VM
-  metadata = {
-    role       = each.value.role
-    project    = var.project_name
-    managed_by = "terraform"
-  }
 }
 
 # -----------------------------------------------------------------------------
@@ -126,24 +119,30 @@ resource "openstack_compute_instance_v2" "nodes" {
 # Crée une IP publique pour chaque node
 # -----------------------------------------------------------------------------
 
-resource "openstack_networking_floatingip_v2" "nodes_ips" {
+resource "scaleway_instance_ip" "nodes_ips" {
   for_each = local.nodes
-  pool     = "Ext-Net" # Pool d'IPs publiques chez OVH
 }
 
 # -----------------------------------------------------------------------------
-# ASSOCIATION DES IPs FLOTTANTES
-# -----------------------------------------------------------------------------
-# 
-# Associe chaque IP flottante à son instance correspondante
-# 
-# ⚠️ On utilise openstack_networking_floatingip_associate_v2 (API Neutron)
-#    au lieu de openstack_compute_floatingip_associate_v2 (API Nova dépréciée)
+# INTERFACES PRIVÉES (IPs fixes)
 # -----------------------------------------------------------------------------
 
-resource "openstack_networking_floatingip_associate_v2" "nodes_ips_assoc" {
-  for_each    = local.nodes
-  floating_ip = openstack_networking_floatingip_v2.nodes_ips[each.key].address
-  port_id     = openstack_compute_instance_v2.nodes[each.key].network[0].port
+resource "scaleway_instance_private_nic" "nodes_private_nic" {
+  for_each = local.nodes
+
+  server_id          = scaleway_instance_server.nodes[each.key].id
+  private_network_id = scaleway_vpc_private_network.k8s_network.id
+  ipam_ip_ids        = [scaleway_ipam_ip.nodes_private_ips[each.key].id]
+  zone               = var.scaleway_zone
+}
+
+resource "scaleway_ipam_ip" "nodes_private_ips" {
+  for_each = local.nodes
+
+  address = each.value.private_ip
+
+  source {
+    private_network_id = scaleway_vpc_private_network.k8s_network.id
+  }
 }
 

@@ -25,33 +25,50 @@ variable "project_name" {
 variable "control_plane_flavor" {
   description = "Type d'instance pour le control-plane"
   type        = string
-  default     = "s1-4"
+  default     = "DEV1-M"
 
-  # Flavors OVH (Public Cloud) :
-  # - s1-2  : 1 vCPU, 2 GB RAM   (~3€/mois) - Trop petit pour le control-plane
-  # - s1-4  : 2 vCPU, 4 GB RAM   (~6€/mois) - Minimum recommandé
-  # - s1-8  : 2 vCPU, 8 GB RAM   (~12€/mois) - Confortable
-  # - b2-7  : 2 vCPU, 7 GB RAM   (~15€/mois) - Compute optimized
+  # Types Scaleway (exemples) :
+  # - DEV1-S  : 2 vCPU, 2 GB RAM   (lab léger)
+  # - DEV1-M  : 3 vCPU, 4 GB RAM   (minimum recommandé)
+  # - DEV1-L  : 4 vCPU, 8 GB RAM   (confortable)
+  # - GP1-XS  : 4 vCPU, 16 GB RAM  (compute/general purpose)
   #
-  # Pour un lab, s1-4 est suffisant pour le control-plane
+  # Pour un lab, DEV1-M est suffisant pour le control-plane
 }
 
 variable "worker_flavor" {
   description = "Type d'instance pour les workers"
   type        = string
-  default     = "s1-4"
+  default     = "DEV1-M"
 
-  # Pour un lab, s1-4 est suffisant pour un worker
+  # Pour un lab, DEV1-M est suffisant pour un worker
   # En production, on met souvent des workers plus gros
 }
 
 variable "image_name" {
   description = "Nom de l'image Ubuntu à utiliser"
   type        = string
-  default     = "Ubuntu 22.04"
+  default     = "ubuntu_jammy"
 
+  # Le nom doit correspondre à une image Scaleway disponible dans ta zone
   # Ubuntu 22.04 LTS est la version recommandée pour Kubernetes
   # Elle sera supportée jusqu'en 2027
+}
+
+# -----------------------------------------------------------------------------
+# CONFIGURATION SCALEWAY
+# -----------------------------------------------------------------------------
+
+variable "scaleway_region" {
+  description = "Région Scaleway (ex: fr-par, nl-ams, pl-waw)"
+  type        = string
+  default     = "fr-par"
+}
+
+variable "scaleway_zone" {
+  description = "Zone Scaleway (ex: fr-par-1, fr-par-2, fr-par-3)"
+  type        = string
+  default     = "fr-par-1"
 }
 
 # -----------------------------------------------------------------------------

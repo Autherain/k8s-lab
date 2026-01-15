@@ -1,14 +1,14 @@
 # =============================================================================
-# FICHIER PRINCIPAL TERRAFORM - Configuration du Provider OVH
+# FICHIER PRINCIPAL TERRAFORM - Configuration du Provider Scaleway
 # =============================================================================
 #
 # CE QUE FAIT CE FICHIER :
-# - Configure Terraform pour utiliser le provider OVH
-# - Récupère les informations de ton projet OVH Public Cloud
+# - Configure Terraform pour utiliser le provider Scaleway
+# - Définit le backend S3 compatible (Scaleway Object Storage)
 #
 # COMMENT ÇA MARCHE :
 # 1. Terraform lit ce fichier pour savoir quel "provider" utiliser
-# 2. Le provider OVH est un plugin qui sait parler à l'API OVH
+# 2. Le provider Scaleway est un plugin qui sait parler à l'API Scaleway
 # 3. Les credentials sont lus depuis les variables d'environnement
 # =============================================================================
 
@@ -16,9 +16,9 @@ terraform {
   required_version = ">= 1.0"
 
   required_providers {
-    openstack = {
-      source  = "terraform-provider-openstack/openstack"
-      version = "~> 1.54"
+    scaleway = {
+      source  = "scaleway/scaleway"
+      version = "~> 2.53"
     }
     tls = {
       source  = "hashicorp/tls"
@@ -35,10 +35,10 @@ terraform {
   }
 
   # =============================================================================
-  # BACKEND - Stockage distant du tfstate dans OVH Object Storage
+  # BACKEND - Stockage distant du tfstate dans Scaleway Object Storage
   # =============================================================================
   #
-  # L'état Terraform est maintenant stocké dans OVH Object Storage (compatible S3).
+  # L'état Terraform est stocké dans Scaleway Object Storage (compatible S3).
   # Avantages :
   # - Partageable entre plusieurs machines/équipes
   # - Sauvegarde automatique avec versioning
@@ -52,34 +52,33 @@ terraform {
   #   export AWS_SECRET_ACCESS_KEY="ton-secret-key"  # pragma: allowlist secret
   #   terraform init
   #
-  # MÉTHODE 2 : Fichier backend.json (format JSON, pratique si OVH te donne du JSON)
+  # MÉTHODE 2 : Fichier backend.json (format JSON)
   #   terraform init -backend-config=backend.json
   #
   # MÉTHODE 3 : Fichier backend.hcl (format HCL)
   #   terraform init -backend-config=backend.hcl
   #
   # Pour créer les credentials S3 :
-  #   1. OVH Manager > Public Cloud > Users & Roles
-  #   2. Crée un utilisateur avec rôle "Object Storage Operator"
-  #   3. Télécharge les credentials (Access Key + Secret Key)
+  #   1. Scaleway Console > Object Storage > Credentials
+  #   2. Crée des credentials (Access Key + Secret Key)
   #
   # =============================================================================
 
   backend "s3" {
-    # Nom du bucket créé dans OVH Object Storage
+    # Nom du bucket créé dans Scaleway Object Storage
     bucket = "k8s-lab-terraform"
 
     # Chemin du fichier tfstate dans le bucket
     key = "k8s-lab/terraform.tfstate"
 
-    # Région : valeur factice requise par Terraform (ignorée car on force l'endpoint OVH)
-    region = "us-east-1"
+    # Région Scaleway (ex: fr-par, nl-ams, pl-waw)
+    region = "fr-par"
 
-    # Endpoints OVH Object Storage (nouvelle syntaxe Terraform 1.6+)
+    # Endpoint Scaleway Object Storage (syntaxe Terraform 1.6+)
     # pragma: allowlist secret
-    endpoints = { s3 = "https://s3.rbx.io.cloud.ovh.net" }
+    endpoints = { s3 = "https://s3.fr-par.scw.cloud" }
 
-    # Options nécessaires pour OVH (compatible S3 mais pas AWS)
+    # Options nécessaires pour Scaleway (compatible S3 mais pas AWS)
     # Ces options désactivent les appels aux services AWS (STS, IAM, etc.)
     skip_credentials_validation = true
     skip_region_validation      = true
@@ -95,35 +94,21 @@ terraform {
 }
 
 # -----------------------------------------------------------------------------
-# PROVIDER OPENSTACK (OVH utilise OpenStack en dessous)
+# PROVIDER SCALEWAY
 # -----------------------------------------------------------------------------
-# 
+#
 # Les credentials sont lus depuis les variables d'environnement :
-# - OS_AUTH_URL         : URL d'authentification OpenStack (fourni par OVH)
-# - OS_TENANT_ID        : ID du projet (= Project ID dans OVH)
-# - OS_TENANT_NAME      : Nom du projet
-# - OS_USERNAME         : Utilisateur OpenStack (créé dans OVH)
-# - OS_PASSWORD         : Mot de passe de l'utilisateur OpenStack
+# - SCW_ACCESS_KEY   : Access key Scaleway
+# - SCW_SECRET_KEY   : Secret key Scaleway
+# - SCW_PROJECT_ID   : Project ID Scaleway
 #
-# ⚠️ IMPORTANT : La région est configurée directement ici (RBX1 = Roubaix)
-#    Elle doit correspondre à la région du backend Object Storage (rbx)
-#    Si RBX1 n'est pas disponible dans ton projet, change pour RBX2
-#
-# Tu récupères les credentials dans : OVH Manager > Public Cloud > Users & Roles
-# Puis tu télécharges le fichier "openrc.sh" et tu fais "source openrc.sh"
+# ⚠️ IMPORTANT : La région/zone doit être cohérente avec le backend Object Storage
+#    Si ton bucket est en fr-par, garde scaleway_region = "fr-par"
 # -----------------------------------------------------------------------------
 
-provider "openstack" {
-  # Région OpenStack pour compute/network (RBX-A = Roubaix)
-  # ⚠️ Attention : OVH utilise "RBX" pour Object Storage mais "RBX-A" pour compute/network
-  # Pour voir les régions disponibles : openstack catalog list
-  region = "RBX-A"
-
-  # Force l'utilisation des endpoints publics (nécessaire pour OVH)
-  endpoint_type = "public"
-
-  # Les autres paramètres (auth_url, tenant_id, username, password) sont lus
-  # depuis les variables d'environnement (plus sécurisé que de les mettre en dur)
+provider "scaleway" {
+  region = var.scaleway_region
+  zone   = var.scaleway_zone
 }
 
 # -----------------------------------------------------------------------------

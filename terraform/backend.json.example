@@ -2,17 +2,16 @@
   "_comment": "Exemple de configuration backend au format JSON",
   "_instructions": [
     "1. Copie ce fichier vers backend.json : cp backend.json.example backend.json",
-    "2. Remplis tes credentials OVH Object Storage (access_key et secret_key)",
+    "2. Remplis tes credentials Scaleway Object Storage (access_key et secret_key)",
     "3. Initialise Terraform avec : terraform init -backend-config=backend.json",
     "",
     "⚠️ IMPORTANT : backend.json contient des secrets, il est exclu du git via .gitignore",
     "",
     "Pour créer les credentials S3 :",
-    "  OVH Manager > Public Cloud > Users & Roles",
-    "  Crée un utilisateur avec rôle 'Object Storage Operator'",
-    "  Télécharge les credentials (format JSON)"
+    "  Scaleway Console > Object Storage > Credentials",
+    "  Crée des credentials (Access Key + Secret Key)"
   ],
-  "access_key": "ton-access-key-ovh",
-  "secret_key": "ton-secret-key-ovh"
+  "access_key": "",
+  "secret_key": ""
 }
 

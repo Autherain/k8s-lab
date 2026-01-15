@@ -15,12 +15,12 @@
 
 output "control_plane_public_ip" {
   description = "IP publique du control-plane"
-  value       = openstack_networking_floatingip_v2.nodes_ips["control-plane"].address
+  value       = scaleway_instance_ip.nodes_ips["control-plane"].address
 }
 
 output "worker_public_ip" {
   description = "IP publique du worker"
-  value       = openstack_networking_floatingip_v2.nodes_ips["worker"].address
+  value       = scaleway_instance_ip.nodes_ips["worker"].address
 }
 
 output "control_plane_private_ip" {
