@@ -4,8 +4,13 @@
 #
 # FONCTIONNEMENT :
 # - Se déclenche automatiquement quand terraform/** change
-# - Plan : lint + validate + plan (automatique)
-# - Apply : nécessite approbation manuelle (environnement "production")
+# - Plan : lint + validate + plan (automatique, pour review)
+# - Apply : re-calcule le plan et applique (nécessite approbation manuelle)
+#
+# NOTE : On n'utilise PAS de plan sauvegardé entre les jobs car :
+# - Scaleway S3 ne supporte pas le state locking
+# - Un plan sauvegardé peut devenir "stale" si le state change
+# - L'apply re-calcule le plan pour garantir la cohérence
 #
 # CONFIGURATION REQUISE :
 #
@@ -87,14 +92,7 @@ jobs:
           SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
           SCW_PROJECT_ID: ${{ secrets.SCW_PROJECT_ID }}
-        run: terraform plan -no-color -out=tfplan
-
-      - name: Upload Plan
-        uses: actions/upload-artifact@v4
-        with:
-          name: tfplan
-          path: ${{ env.TF_ROOT }}/tfplan
-          retention-days: 5
+        run: terraform plan -no-color
 
   # ---------------------------------------------------------------------------
   # ÉTAPE 2 : Apply (MANUEL - uniquement sur main)
@@ -121,12 +119,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
         run: terraform init -input=false
 
-      - name: Download Plan
-        uses: actions/download-artifact@v4
-        with:
-          name: tfplan
-          path: ${{ env.TF_ROOT }}
-
       - name: Terraform Apply
         working-directory: ${{ env.TF_ROOT }}
         env:
@@ -135,4 +127,4 @@ jobs:
           SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
           SCW_PROJECT_ID: ${{ secrets.SCW_PROJECT_ID }}
-        run: terraform apply -auto-approve tfplan
+        run: terraform apply -auto-approve
