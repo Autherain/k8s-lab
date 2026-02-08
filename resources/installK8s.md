@@ -166,14 +166,15 @@ helm install cilium oci://quay.io/cilium/charts/cilium \
 # cilium connectivity test
 ```
 
-## INSTALL CERT-MANAGER (ONLY ON CONTROL PLANE)
+# INSTALL CERT-MANAGER (ONLY ON CONTROL PLANE)
 
 cert-manager issues and renews TLS certificates (e.g. for Ingress, Let's Encrypt). Docs: https://cert-manager.io/docs/installation/helm/
 
 ```bash
 # Option A: OCI registry (recommended)
 helm install cert-manager oci://quay.io/jetstack/charts/cert-manager \
-  --version v1.19.2 \  --namespace cert-manager \
+  --version v1.19.2 \
+  --namespace cert-manager \
   --create-namespace \
   --set crds.enabled=true
 
