@@ -6,6 +6,7 @@
 # - Se déclenche automatiquement quand terraform/** change
 # - Plan : lint + validate + plan (automatique, pour review)
 # - Apply : re-calcule le plan et applique (nécessite approbation manuelle)
+# - Destroy : manuel via "Run workflow" > cocher "Run terraform destroy" (environnement production)
 #
 # NOTE : On n'utilise PAS de plan sauvegardé entre les jobs car :
 # - Scaleway S3 ne supporte pas le state locking
@@ -35,6 +36,13 @@ on:
     paths:
       - "terraform/**"
       - ".github/workflows/terraform.yml"
+  workflow_dispatch:
+    inputs:
+      destroy:
+        description: "Run terraform destroy (delete all infrastructure)"
+        required: false
+        default: false
+        type: boolean
 
 env:
   TF_VERSION: "1.14.0"
@@ -51,6 +59,7 @@ jobs:
   plan:
     name: "1️⃣ Lint & Plan"
     runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_dispatch' || github.event.inputs.destroy != 'true'
 
     steps:
       - uses: actions/checkout@v4
@@ -119,7 +128,7 @@ jobs:
     name: "2️⃣ Apply"
     runs-on: ubuntu-latest
     needs: plan
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master') && (github.event_name != 'workflow_dispatch' || github.event.inputs.destroy != 'true')
     environment: production
 
     steps:
@@ -146,3 +155,37 @@ jobs:
           SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
           SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_PROJECT_ID }}
         run: terraform apply -auto-approve
+
+  # ---------------------------------------------------------------------------
+  # ÉTAPE 3 : Destroy (MANUEL - workflow_dispatch avec "destroy" coché)
+  # ---------------------------------------------------------------------------
+  destroy:
+    name: "3️⃣ Destroy"
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.destroy == 'true'
+    environment: production
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+
+      - name: Terraform Init
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+        run: terraform init -input=false
+
+      - name: Terraform Destroy
+        working-directory: ${{ env.TF_ROOT }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_KEY }}
+          SCW_ACCESS_KEY: ${{ secrets.SCW_ACCESS_KEY }}
+          SCW_SECRET_KEY: ${{ secrets.SCW_SECRET_KEY }}
+          SCW_DEFAULT_PROJECT_ID: ${{ secrets.SCW_PROJECT_ID }}
+        run: terraform destroy -auto-approve
