@@ -4,13 +4,13 @@
 //
 // Uses tfexec (official HashiCorp library) to interact with Terraform.
 //
-// BUILD:
-//   cd scripts/terraform/get-cluster-info && go build -o get-cluster-info .
+// RUN:
+//   cd scripts/terraform/get-cluster-info && go run .
 //
 // USAGE:
 //   get-cluster-info                                    # Auto-detect terraform directory
 //   get-cluster-info -t /path/to/terraform              # Specify terraform directory
-//   get-cluster-info -c /path/to/creds.json             # Custom credentials file
+//   get-cluster-info -c /path/to/creds.yaml             # Custom credentials file (YAML or JSON)
 //   get-cluster-info --json                             # JSON output
 //   get-cluster-info --no-init                          # Skip terraform init
 //
@@ -26,10 +26,12 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/hashicorp/terraform-exec/tfexec"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // =============================================================================
@@ -105,11 +107,11 @@ var (
 // Types
 // =============================================================================
 
-// Credentials holds S3 credentials from the JSON file.
-// JSON tags use snake_case to match the expected file format.
+// Credentials holds S3 credentials from the backend file (YAML or JSON).
+// Tags use snake_case to match the expected file format.
 type Credentials struct {
-	AccessKey string `json:"access_key"` //nolint:tagliatelle
-	SecretKey string `json:"secret_key"` //nolint:tagliatelle
+	AccessKey string `json:"access_key" yaml:"access_key"` //nolint:tagliatelle
+	SecretKey string `json:"secret_key" yaml:"secret_key"` //nolint:tagliatelle
 }
 
 // ClusterInfo contains cluster information.
@@ -159,8 +161,8 @@ Examples:
   # Specify terraform directory
   get-cluster-info -t /path/to/terraform
 
-  # Use a custom credentials file
-  get-cluster-info -c /path/to/creds.json
+  # Use a custom credentials file (YAML or JSON)
+  get-cluster-info -c /path/to/creds.yaml
 
   # JSON output for scripting
   get-cluster-info --json
@@ -178,7 +180,7 @@ func init() {
 		"Directory containing Terraform files (default: auto-detect)")
 
 	rootCmd.Flags().StringVarP(&config.CredentialsFile, "credentials", "c", "",
-		"Path to credentials JSON file (default: <terraform-dir>/backend.json)")
+		"Path to credentials file (default: <terraform-dir>/backend.yaml or backend.json)")
 
 	rootCmd.Flags().StringVarP(&config.SSHKeyPath, "ssh-key", "k", "",
 		"Path where to save the SSH key (default: ~/.ssh/k8s-lab.pem)")
@@ -285,7 +287,7 @@ func resolveDefaults() error {
 	}
 
 	if config.CredentialsFile == "" {
-		config.CredentialsFile = filepath.Join(config.TerraformDir, "backend.json")
+		config.CredentialsFile = resolveCredentialsFile()
 	}
 
 	if config.SSHKeyPath == "" {
@@ -318,6 +320,17 @@ func findProjectRoot() (string, error) {
 	return "", fmt.Errorf("could not find terraform/main.tf from %s", cwd)
 }
 
+// resolveCredentialsFile returns the path to the first existing backend file (YAML then JSON).
+func resolveCredentialsFile() string {
+	for _, name := range []string{"backend.yaml", "backend.yml", "backend.json"} {
+		p := filepath.Join(config.TerraformDir, name)
+		if _, err := os.Stat(p); err == nil {
+			return p
+		}
+	}
+	return filepath.Join(config.TerraformDir, "backend.yaml")
+}
+
 func checkPrerequisites() error {
 	if _, err := exec.LookPath("terraform"); err != nil {
 		return errors.New("terraform is not installed or not in PATH")
@@ -327,7 +340,7 @@ func checkPrerequisites() error {
 		return fmt.Errorf(
 			"credentials file not found: %s\n\n"+
 				"Create the file with your S3 credentials:\n"+
-				"  cp %s/backend.json.example %s",
+				"  cp %s/backend.yaml.example %s   # or backend.json.example → backend.json",
 			config.CredentialsFile, config.TerraformDir, config.CredentialsFile,
 		)
 	}
@@ -344,8 +357,16 @@ func loadCredentials() (*Credentials, error) {
 	}
 
 	var creds Credentials
-	if err := json.Unmarshal(data, &creds); err != nil {
-		return nil, fmt.Errorf("failed to parse JSON file: %w", err)
+	ext := strings.ToLower(filepath.Ext(config.CredentialsFile))
+	switch ext {
+	case ".yaml", ".yml":
+		if err := yaml.Unmarshal(data, &creds); err != nil {
+			return nil, fmt.Errorf("failed to parse YAML file: %w", err)
+		}
+	default:
+		if err := json.Unmarshal(data, &creds); err != nil {
+			return nil, fmt.Errorf("failed to parse JSON file: %w", err)
+		}
 	}
 
 	if creds.AccessKey == "" || creds.SecretKey == "" {
@@ -371,6 +392,12 @@ func setupTerraform(creds *Credentials) (*tfexec.Terraform, error) {
 	env := map[string]string{
 		"AWS_ACCESS_KEY_ID":     creds.AccessKey,
 		"AWS_SECRET_ACCESS_KEY": creds.SecretKey,
+	}
+	// tfexec replaces the subprocess env, so pass PATH so Terraform can find getent etc.
+	if path := os.Getenv("PATH"); path != "" {
+		env["PATH"] = path
+	} else {
+		env["PATH"] = "/usr/bin:/usr/local/bin:/bin"
 	}
 
 	openStackVars := []string{

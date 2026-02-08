@@ -14,14 +14,24 @@ check: ## Vérifie les prérequis
 	@echo "✓ Vérifications OK"
 
 .PHONY: init
-init: ## Initialise Terraform
-	cd $(TERRAFORM_DIR) && terraform init  -backend-config=backend.json;
+init: ## Initialise Terraform (utilise backend.yaml ou backend.json)
+	@if [ -f $(TERRAFORM_DIR)/backend.yaml ]; then \
+		cd $(TERRAFORM_DIR) && terraform init -backend-config=backend.yaml; \
+	elif [ -f $(TERRAFORM_DIR)/backend.yml ]; then \
+		cd $(TERRAFORM_DIR) && terraform init -backend-config=backend.yml; \
+	else \
+		cd $(TERRAFORM_DIR) && terraform init -backend-config=backend.json; \
+	fi
 
 .PHONY: setup
 setup: ## Crée terraform.tfvars depuis l'exemple
 	@[ ! -f $(TERRAFORM_DIR)/terraform.tfvars ] || (echo "terraform.tfvars existe déjà" && exit 1)
 	@cp $(TERRAFORM_DIR)/terraform.tfvars.example $(TERRAFORM_DIR)/terraform.tfvars
 	@echo "✓ terraform.tfvars créé"
+
+.PHONY: cluster-info
+cluster-info: ## Affiche les infos du cluster (IPs, commandes SSH)
+	cd scripts/terraform/get-cluster-info && go run .
 
 .PHONY: clean
 clean: ## Nettoie les fichiers temporaires

@@ -1,0 +1,16 @@
+# Exemple de configuration backend au format YAML
+#
+# 1. Copie ce fichier vers backend.yaml :
+#      cp backend.yaml.example backend.yaml
+# 2. Remplis tes credentials Scaleway Object Storage (access_key et secret_key)
+# 3. Initialise Terraform avec :
+#      terraform init -backend-config=backend.yaml
+#
+# IMPORTANT : backend.yaml contient des secrets, il est exclu du git via .gitignore
+#
+# Pour créer les credentials S3 :
+#   Scaleway Console > Object Storage > Credentials
+#   Crée des credentials (Access Key + Secret Key)
+
+access_key: ""
+secret_key: ""

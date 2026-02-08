@@ -48,6 +48,8 @@ terraform/.ssh/
 
 # Backend configuration avec secrets
 terraform/backend.json
+terraform/backend.yaml
+terraform/backend.yml
 *.tfplan
 *.tfplan.*
 
