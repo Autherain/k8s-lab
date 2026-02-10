@@ -32,9 +32,10 @@ containerd config default \
 # Restart containerd to apply the configuration changes
 sudo systemctl restart containerd
 
-# Kubernetes doesn’t support swap unless explicitly configured under cgroup v2
+# Kubernetes doesn't support swap unless explicitly configured under cgroup v2
 # See here for more info https://kubernetes.io/docs/setup/production-environment/tools/kubeadm/install-kubeadm/#swap-configuration
 sudo swapoff -a
+sudo sed -i '/\sswap\s/s/^/#/' /etc/fstab
 ```
 
 ## INSTALL KUBEADM, KUBELET, and KUBECTL
@@ -100,6 +101,8 @@ sudo sed -i '/^#net\.ipv4\.ip_forward=1/s/^#//' /etc/sysctl.conf
 # Apply the changes to sysctl.conf
 # Any changes made to sysctl configuration files take immediate effect without requiring a reboot
 sudo sysctl -p
+
+sudo reboot
 ```
 
 ## INSTALL HELM
@@ -120,16 +123,44 @@ sudo apt-get install helm
 helm version
 ```
 
+## PRIVATE NETWORK (required for Cilium and firewall)
+
+The cluster must use the **private network** (e.g. 10.0.0.0/24) instead of public IPs for node-to-node traffic. Otherwise:
+
+- **Security**: Using the public interface exposes sensitive traffic (kubelet, Cilium, etc.) and forces you to open many ports on the firewall.
+- **Cilium**: The relay and other components expect to reach nodes on their advertised address; if that is the public IP, traffic goes over the public interface and can be blocked or broken.
+
+Steps below ensure the API server and every node advertise and use their **private IP**. Adjust the `grep` pattern if your private CIDR is not 10.0.0.0/24.
+
+### Why `/etc/default/kubelet` and not a systemd drop-in?
+
+On Debian/Ubuntu, the kubelet systemd unit reads an `EnvironmentFile` at `/etc/default/kubelet` and expands `$KUBELET_EXTRA_ARGS` in its `ExecStart` line. Writing `--node-ip` there is the canonical way to pass extra flags. A custom systemd drop-in (e.g. `20-node-ip.conf` in `kubelet.service.d/`) that sets its own `Environment="KUBELET_EXTRA_ARGS=..."` does **not** override the `EnvironmentFile` and is silently ignored. See [kubernetes/kubeadm#203](https://github.com/kubernetes/kubeadm/issues/203) for the full history.
+
 ## INITIALIZE THE CLUSTER (ONLY FROM CONTROL PLANE)
 
 ```bash
 ########################################
 # ⚠️ WARNING ONLY ON THE CONTROL PLANE #
-#######################################
-# Initialize the cluster specifying containerd as the container runtime, ensuring that the --cri-socket argument includes the unix:// prefix
-# containerd.sock is a Unix domain socket used by containerd
-# The Unix socket mechanism is a method for inter-process communication (IPC) on the same host.
-sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket=unix:///run/containerd/containerd.sock
+########################################
+
+# Detect private IP (10.0.0.0/24; change the grep pattern if you use another CIDR)
+PRIVATE_IP=$(hostname -I | tr ' ' '\n' | grep -E '^10\.0\.0\.' | head -1)
+if [ -z "$PRIVATE_IP" ]; then echo "ERROR: no private IP 10.0.0.x found"; exit 1; fi
+echo "Using private IP: $PRIVATE_IP"
+
+# Tell kubelet to advertise the private IP.
+# On Debian/Ubuntu the kubelet unit reads /etc/default/kubelet and expands
+# $KUBELET_EXTRA_ARGS in its ExecStart line — this is the canonical way to
+# pass extra flags (NOT a systemd drop-in).
+# See https://github.com/kubernetes/kubeadm/issues/203
+echo "KUBELET_EXTRA_ARGS=--node-ip=$PRIVATE_IP" | sudo tee /etc/default/kubelet
+
+# Initialize the cluster on the private IP so the API server and join command use it.
+# containerd.sock is a Unix domain socket used by containerd (IPC on the same host).
+sudo kubeadm init \
+  --apiserver-advertise-address="$PRIVATE_IP" \
+  --pod-network-cidr=192.168.0.0/16 \
+  --cri-socket=unix:///run/containerd/containerd.sock
 
 # HOW TO RESET IF NEEDED
 # sudo kubeadm reset --cri-socket=unix:///run/containerd/containerd.sock
@@ -139,6 +170,15 @@ sudo kubeadm init --pod-network-cidr=192.168.0.0/16 --cri-socket=unix:///run/con
 mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# Wait for the API server to be really ready
+echo "Waiting for API server..."
+until kubectl get nodes &>/dev/null; do sleep 2; done
+echo "API server is responding"
+
+# Verify the node registered with the private IP
+kubectl get nodes -o wide
+# ↑ INTERNAL-IP must show your 10.0.0.x address
 
 # ONLY FOR FLANNEL: Load `br_netfilter` and enable bridge networking
 # ONLY FOR FLANNEL: echo "br_netfilter" | sudo tee /etc/modules-load.d/br_netfilter.conf
@@ -150,23 +190,30 @@ sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 # Option A: OCI registry (recommended, no repo add)
 helm install cilium oci://quay.io/cilium/charts/cilium \
-  --version 1.19.0 \
-  --namespace kube-system
+     --version 1.19.0 \
+     --namespace kube-system \
+     --set ipam.mode=kubernetes \
+     --set k8sServiceHost="$PRIVATE_IP" \
+     --set k8sServicePort=6443
 
 # Option B: Traditional Helm repo (if OCI fails or you prefer)
 # helm repo add cilium https://helm.cilium.io/
 # helm repo update
 # helm install cilium cilium/cilium --version 1.19.0 --namespace kube-system
 
-# If the cluster had pods running before Cilium (e.g. CoreDNS), restart them so Cilium manages their network:
-# kubectl get pods --all-namespaces -o custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,HOSTNETWORK:.spec.hostNetwork --no-headers=true | grep '<none>' | awk '{print "-n "$1" "$2}' | xargs -L 1 -r kubectl delete pod
+# Wait for kube-system pods (including Cilium) to be Ready
+echo "Waiting for kube-system pods..."
+kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=120s
+echo "kube-system pods are ready"
+
+kubectl get nodes -o wide
 
 # Validate (install Cilium CLI from https://github.com/cilium/cilium-cli/releases, then):
 # cilium status --wait
 # cilium connectivity test
 ```
 
-# INSTALL CERT-MANAGER (ONLY ON CONTROL PLANE)
+## INSTALL CERT-MANAGER (ONLY ON CONTROL PLANE)
 
 cert-manager issues and renews TLS certificates (e.g. for Ingress, Let's Encrypt). Docs: https://cert-manager.io/docs/installation/helm/
 
@@ -202,10 +249,23 @@ helm install external-secrets external-secrets/external-secrets \
 
 ## JOIN THE WORKER NODES TO THE CLUSTER
 
+Use the exact `kubeadm join` command printed by `kubeadm init` (it will use the control plane's private IP). On **each worker**, configure kubelet to advertise its private IP **before** joining so that Cilium and other components use the private network from the start.
+
 ```bash
 #######################################
 # ⚠️ WARNING: DO NOT USE THIS COMMAND #
 #######################################
-# Get this command from the 'kubeadm init' output instead (above)
-sudo kubeadm join x.x.x.x:6443 --token lllrj0.pystabmhlyt2svty --discovery-token-ca-cert-hash sha256:9d2fd15886eb176466640067f361ed2295de38188b057becf31d3bf5a4fb0b73
+# Get the real command from the 'kubeadm init' output (it will look like PRIVATE_IP:6443)
+
+# Detect this worker's private IP
+PRIVATE_IP=$(hostname -I | tr ' ' '\n' | grep -E '^10\.0\.0\.' | head -1)
+if [ -z "$PRIVATE_IP" ]; then echo "ERROR: no private IP 10.0.0.x found"; exit 1; fi
+echo "Using private IP: $PRIVATE_IP"
+
+# Tell kubelet to advertise the private IP (same method as control plane).
+# /etc/default/kubelet is read by the kubelet systemd unit on Debian/Ubuntu.
+echo "KUBELET_EXTRA_ARGS=--node-ip=$PRIVATE_IP" | sudo tee /etc/default/kubelet
+
+# NOW join the cluster — kubeadm will start kubelet with the correct --node-ip
+sudo kubeadm join x.x.x.x:6443 --token <token> --discovery-token-ca-cert-hash sha256:<hash>
 ```
