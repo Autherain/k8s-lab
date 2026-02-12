@@ -156,11 +156,12 @@ echo "Using private IP: $PRIVATE_IP"
 echo "KUBELET_EXTRA_ARGS=--node-ip=$PRIVATE_IP" | sudo tee /etc/default/kubelet
 
 # Initialize the cluster on the private IP so the API server and join command use it.
-# containerd.sock is a Unix domain socket used by containerd (IPC on the same host).
+# Cilium replaces kube-proxy, so we skip the kube-proxy addon.
 sudo kubeadm init \
   --apiserver-advertise-address="$PRIVATE_IP" \
   --pod-network-cidr=192.168.0.0/16 \
-  --cri-socket=unix:///run/containerd/containerd.sock
+  --cri-socket=unix:///run/containerd/containerd.sock \
+  --skip-phases=addon/kube-proxy
 
 # HOW TO RESET IF NEEDED
 # sudo kubeadm reset --cri-socket=unix:///run/containerd/containerd.sock
@@ -171,10 +172,6 @@ mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
-# Wait for the API server to be really ready
-echo "Waiting for API server..."
-until kubectl get nodes &>/dev/null; do sleep 2; done
-echo "API server is responding"
 
 # Verify the node registered with the private IP
 kubectl get nodes -o wide
@@ -190,27 +187,20 @@ kubectl get nodes -o wide
 
 # Option A: OCI registry (recommended, no repo add)
 helm install cilium oci://quay.io/cilium/charts/cilium \
-     --version 1.19.0 \
-     --namespace kube-system \
-     --set ipam.mode=kubernetes \
-     --set k8sServiceHost="$PRIVATE_IP" \
-     --set k8sServicePort=6443
+  --version 1.19.0 \
+  --namespace kube-system \
+  --set ipam.mode=kubernetes \
+  --set k8sServiceHost="$PRIVATE_IP" \
+  --set k8sServicePort=6443 \
+  --set kubeProxyReplacement=true \
+  --set ingressController.enabled=true \
+  --set ingressController.loadbalancerMode=dedicated
 
-# Option B: Traditional Helm repo (if OCI fails or you prefer)
-# helm repo add cilium https://helm.cilium.io/
-# helm repo update
-# helm install cilium cilium/cilium --version 1.19.0 --namespace kube-system
-
-# Wait for kube-system pods (including Cilium) to be Ready
 echo "Waiting for kube-system pods..."
 kubectl wait --for=condition=Ready pods --all -n kube-system --timeout=120s
 echo "kube-system pods are ready"
 
 kubectl get nodes -o wide
-
-# Validate (install Cilium CLI from https://github.com/cilium/cilium-cli/releases, then):
-# cilium status --wait
-# cilium connectivity test
 ```
 
 ## INSTALL CERT-MANAGER (ONLY ON CONTROL PLANE)
